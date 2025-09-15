@@ -1,4 +1,4 @@
-import { DINO_NSFWCLASSIFIER } from "./dino3_nsfw_classifier";
+import { DINO_NSFWCLASSIFIER } from "/lib/dino3_nsfw_classifier";
 import { Tensor } from "onnxruntime-web";
 
 const model = new DINO_NSFWCLASSIFIER();

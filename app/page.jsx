@@ -34,6 +34,8 @@ import {
 } from "@/lib/imageutils";
 
 import { Tensor } from "onnxruntime-web";
+import { AutoProcessor, RawImage } from "@huggingface/transformers";
+const MODEL_ID = "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX";
 
 export default function Home() {
   // state
@@ -41,7 +43,6 @@ export default function Home() {
   const [modelIsLoading, setModelIsLoading] = useState(false);
   const [modelIsProcessing, setModelIsProcessing] = useState(false);
   const [modelError, setModelError] = useState(false);
-  const [status, setStatus] = useState("");  
   const [stats, setStats] = useState(null);
   const [classificationResult, setClassificationResult] = useState(null)
 
@@ -53,7 +54,6 @@ export default function Home() {
   const [inputImage, setInputImage] = useState(null); // offscreen canvas
   const canvasEl = useRef(null);
   const fileInputEl = useRef(null);
-
 
   // input dialog for custom URLs
   const [inputDialogOpen, setInputDialogOpen] = useState(false);
@@ -75,9 +75,19 @@ export default function Home() {
   const checkImageClick = async () => {
     setModelIsProcessing(true);
 
+    // Preprocess image w/ transformer.js AutoProcessor
+    const processor = await AutoProcessor.from_pretrained(MODEL_ID)
+    const image = await RawImage.fromCanvas(canvasEl.current);
+    const vision_inputs = await processor(image);
+    const tensor = vision_inputs.pixel_values.ort_tensor
+
+    const float32Array = tensor.cpuData
+    const shape = tensor.dims
+
     worker.current.postMessage({
       type: "classifyImage",
-      data: canvasToFloat32Array(inputImage),
+      data: { float32Array, shape },
+      // data: canvasToFloat32Array(inputImage),
     });
 
   };
@@ -92,7 +102,6 @@ export default function Home() {
       if (success) {
         setModelIsLoading(false);
         setDevice(device);
-        setStatus("NSFW Check");
       } else {
         setModelError("Error (check JS console)");
       }
@@ -101,7 +110,8 @@ export default function Home() {
     } else if (type == "classifyImageResults") {
       const {logits, durationMs} = data
 
-      console.log("logits!", logits)
+      console.log("logits!", logits.cpuData)
+
       handleClassifyImageResults(logits)
       setModelIsProcessing(false);
     } else if (type == "stats") {
@@ -120,7 +130,6 @@ export default function Home() {
     const dataURL = window.URL.createObjectURL(file)
 
     resetState()
-    setStatus("Encode image")
     setImageURL(dataURL)
   }
 
@@ -129,7 +138,6 @@ export default function Home() {
     const dataURL = urlText;
 
     resetState()
-    setStatus("Encode image");
     setImageURL(dataURL);
   };
 
@@ -138,9 +146,10 @@ export default function Home() {
     if (!worker.current) {
       setModelIsLoading(true);
 
-      worker.current = new Worker(new URL("./worker.js", import.meta.url), {
-        type: "module",
-      });
+      // worker.current = new Worker(new URL("./worker.js", import.meta.url), {
+      //   type: "module",
+      // });
+      worker.current = new Worker(new URL('/public/worker.js', import.meta.url))
       worker.current.addEventListener("message", onWorkerMessage);
       worker.current.postMessage({ type: "ping" });
 
