@@ -22,14 +22,9 @@ import {
 import InputDialog from "@/components/ui/inputdialog";
 import { Button } from "@/components/ui/button";
 import {
-  LoaderCircle,
-  Crop,
-  ImageUp,
-  ImageDown,
-  Github,
-  LoaderPinwheel,
-  Fan,
+  LoaderCircle, Crop, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle
 } from "lucide-react";
+
 
 // Image manipulations
 import {
@@ -46,19 +41,19 @@ export default function Home() {
   const [modelIsLoading, setModelIsLoading] = useState(false);
   const [modelIsProcessing, setModelIsProcessing] = useState(false);
   const [modelError, setModelError] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("");  
+  const [stats, setStats] = useState(null);
+  const [classificationResult, setClassificationResult] = useState(null)
 
   // web worker, image 
   const worker = useRef(null);
-  const [inputImage, setInputImage] = useState(null); // offscreen canvas
   const [imageURL, setImageURL] = useState(
     "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
   );
+  const [inputImage, setInputImage] = useState(null); // offscreen canvas
   const canvasEl = useRef(null);
   const fileInputEl = useRef(null);
-  const pointsRef = useRef([]);
 
-  const [stats, setStats] = useState(null);
 
   // input dialog for custom URLs
   const [inputDialogOpen, setInputDialogOpen] = useState(false);
@@ -69,8 +64,11 @@ export default function Home() {
     const logitsArray = logitsTensor.cpuData ? logitsTensor.cpuData : logitsTensor.data
     const probs = softmax1D(logitsArray)
 
+    // DEBUG
     const [probSafe, probNSFW] = probs
     console.log(probNSFW)
+
+    setClassificationResult(probs)
   };
 
   // Start encoding image
@@ -113,7 +111,6 @@ export default function Home() {
 
   // Reset all the image-based state: points, mask, offscreen canvases .. 
   const resetState = () => {
-    pointsRef.current = [];
     setInputImage(null);
   }
 
@@ -215,7 +212,10 @@ export default function Home() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
+
+            {/* BUTTONS */}
             <div className="flex justify-between gap-4">
+              {/* RUN */}
               { (modelIsLoading || modelIsProcessing ) ? (
                 <Button disabled={true}>
                   <LoaderCircle className="animate-spin w-6 h-6" />
@@ -227,12 +227,14 @@ export default function Home() {
               )}
 
               <div className="flex gap-1">
+                {/* Image Upload */}
                 <Button 
                   onClick={()=>{fileInputEl.current.click()}} 
                   variant="secondary" 
                   disabled={modelIsLoading || modelIsProcessing}>
                   <ImageUp/> Upload
                 </Button>
+                {/* Image from URL */}
                 <Button
                     onClick={()=>{setInputDialogOpen(true)}}
                     variant="secondary"
@@ -242,8 +244,15 @@ export default function Home() {
                 </Button>
               </div>
             </div>
+
+            {/* NSFW Prob. */}
+            <div>
+              <ClassificationResults result={classificationResult} />
+            </div>
+
+            {/* IMAGE */}
             <div className="flex justify-center">
-              <canvas ref={canvasEl} className="max-w-lg w-auto h-auto"/>
+              <canvas ref={canvasEl} className="max-w-md w-auto h-auto"/>
             </div>
           </div>
         </CardContent>
@@ -270,3 +279,52 @@ export default function Home() {
     </div>
   );
 }
+
+const ClassificationResults = ({ result }) => {
+  if (!result) return null
+
+  const [ probSafe, probNSFW ] = result
+  const nsfwPercentage = Math.round(probNSFW * 100)
+  const safePercentage = Math.round(probSafe * 100)
+  const isSafe = probSafe > probNSFW
+
+  return (
+    <div className="mt-4 p-4 border rounded-lg bg-gradient-to-r from-slate-50 to-slate-100">
+      <div className="flex items-center gap-2 mb-3">
+        {isSafe ? <Shield className="w-5 h-5 text-green-600" /> : <AlertTriangle className="w-5 h-5 text-red-600" />}
+        <h3 className="font-semibold text-lg">Classification: {isSafe ? "Safe" : "NSFW"}</h3>
+      </div>
+
+      <div className="space-y-3">
+        {/* Safe probability bar */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-green-700 font-medium">Safe</span>
+            <span className="text-green-700 font-bold">{safePercentage}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${safePercentage}%` }}
+            ></div>
+          </div>
+        </div>
+
+        {/* NSFW probability bar */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-red-700 font-medium">NSFW</span>
+            <span className="text-red-700 font-bold">{nsfwPercentage}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-gradient-to-r from-red-500 to-red-600 h-3 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${nsfwPercentage}%` }}
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
