@@ -34,11 +34,11 @@ import {
 // Image manipulations
 import {
   resizeCanvas,
-  resizeAndPadBox,
   canvasToFloat32Array,
-  float32ArrayToCanvas,
-  sliceTensor,
+  softmax1D,
 } from "@/lib/imageutils";
+
+import { Tensor } from "onnxruntime-web";
 
 export default function Home() {
   // state
@@ -65,18 +65,13 @@ export default function Home() {
   const inputDialogDefaultURL = "https://upload.wikimedia.org/wikipedia/commons/9/96/Pro_Air_Martin_404_N255S.jpg"
 
   // Decoding finished -> parse result and update mask
-  const handleClassifyImageResults = (logits) => {
-    // SAM2 returns 3 mask along with scores -> select best one
-    // const maskTensors = decodingResults.masks;
-    // const [bs, noMasks, width, height] = maskTensors.dims;
-    // const maskScores = decodingResults.iou_predictions.cpuData;
-    // const bestMaskIdx = maskScores.indexOf(Math.max(...maskScores));
-    // const bestMaskArray = sliceTensor(maskTensors, bestMaskIdx)
-    // let bestMaskCanvas = float32ArrayToCanvas(bestMaskArray, width, height)
-    // bestMaskCanvas = resizeCanvas(bestMaskCanvas, imageSize);
+  const handleClassifyImageResults = (logitsTensor) => {
+    const logitsArray = logitsTensor.cpuData ? logitsTensor.cpuData : logitsTensor.data
+    const probs = softmax1D(logitsArray)
 
+    const [probSafe, probNSFW] = probs
+    console.log(probNSFW)
   };
-
 
   // Start encoding image
   const checkImageClick = async () => {

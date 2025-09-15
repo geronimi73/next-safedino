@@ -96,7 +96,7 @@ export class DINO_NSFWCLASSIFIER {
 
     console.log(results)
 
-    return results
+    return results.classification
   }
 
 }
