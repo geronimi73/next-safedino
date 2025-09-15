@@ -89,79 +89,14 @@ export class DINO_NSFWCLASSIFIER {
     return {success: false}
   }
 
-  // async getEncoderSession() {
-  //   if (!this.sessionEncoder)
-  //     this.sessionEncoder = await this.getORTSession(this.bufferEncoder);
+  async classifyImage(inputTensor) {
+    const [session, device] = this.sessionModel
+    console.log(session)
+    const results = await session.run({ pixel_values: inputTensor });
 
-  //   return this.sessionEncoder;
-  // }
+    console.log(results)
 
-  // async getDecoderSession() {
-  //   if (!this.sessionDecoder)
-  //     this.sessionDecoder = await this.getORTSession(this.bufferDecoder);
+    return results
+  }
 
-  //   return this.sessionDecoder;
-  // }
-
-  // async encodeImage(inputTensor) {
-  //   const [session, device] = await this.getEncoderSession();
-  //   const results = await session.run({ image: inputTensor });
-
-  //   this.image_encoded = {
-  //     high_res_feats_0: results[session.outputNames[0]],
-  //     high_res_feats_1: results[session.outputNames[1]],
-  //     image_embed: results[session.outputNames[2]],
-  //   };
-  // }
-
-  // async decode(points, masks) {
-  //   const [session, device] = await this.getDecoderSession();
-
-  //   const flatPoints = points.map((point) => {
-  //     return [point.x, point.y];
-  //   });
-
-  //   const flatLabels = points.map((point) => {
-  //     return point.label;
-  //   });
-
-  //   console.log({
-  //     flatPoints,
-  //     flatLabels,
-  //     masks
-  //   });
-
-  //   let mask_input, has_mask_input
-  //   if (masks) {
-  //     mask_input = masks
-  //     has_mask_input = new ort.Tensor("float32", [1], [1])
-  //   } else {
-  //     // dummy data
-  //     mask_input = new ort.Tensor(
-  //       "float32",
-  //       new Float32Array(256 * 256),
-  //       [1, 1, 256, 256]
-  //     )
-  //     has_mask_input = new ort.Tensor("float32", [0], [1])
-  //   }
-
-  //   const inputs = {
-  //     image_embed: this.image_encoded.image_embed,
-  //     high_res_feats_0: this.image_encoded.high_res_feats_0,
-  //     high_res_feats_1: this.image_encoded.high_res_feats_1,
-  //     point_coords: new ort.Tensor("float32", flatPoints.flat(), [
-  //       1,
-  //       flatPoints.length,
-  //       2,
-  //     ]),
-  //     point_labels: new ort.Tensor("float32", flatLabels, [
-  //       1,
-  //       flatLabels.length,
-  //     ]),
-  //     mask_input: mask_input,
-  //     has_mask_input: has_mask_input,
-  //   };
-
-  //   return await session.run(inputs);
-  // }
 }
