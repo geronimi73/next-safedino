@@ -1,40 +1,21 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  createContext,
-  useCallback,
-} from "react";
+import React, {useState, useEffect, useRef, useCallback,} from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { cn } from "@/lib/utils";
 
 // UI
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@/components/ui/card";
 import InputDialog from "@/components/ui/inputdialog";
 import { Button } from "@/components/ui/button";
-import {
-  LoaderCircle, Crop, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle
-} from "lucide-react";
+import {LoaderCircle, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle} from "lucide-react";
 
-
-// Image manipulations
-import {
-  resizeCanvas,
-  canvasToFloat32Array,
-  softmax1D,
-} from "@/lib/imageutils";
-
+// Image/Tensor manipulations
+import { resizeCanvas, canvasToFloat32Array, softmax1D} from "@/lib/imageutils";
 import { Tensor } from "onnxruntime-web";
 import { AutoProcessor, RawImage } from "@huggingface/transformers";
+
+// Only used for the AutoProcessor, actual model is loaded in /lib/dino3_nsfw_classifier.js 
 const MODEL_ID = "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX";
 
 export default function Home() {
@@ -42,16 +23,17 @@ export default function Home() {
   const [device, setDevice] = useState(null);
   const [modelIsLoading, setModelIsLoading] = useState(false);
   const [modelIsProcessing, setModelIsProcessing] = useState(false);
-  const [modelError, setModelError] = useState(false);
+  const [modelError, setModelError] = useState(null);
   const [stats, setStats] = useState(null);
   const [classificationResult, setClassificationResult] = useState(null)
 
-  // web worker, image 
+  // web worker ref
   const worker = useRef(null);
+
+  // default image 
   const [imageURL, setImageURL] = useState(
     "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
   );
-  const [inputImage, setInputImage] = useState(null); // offscreen canvas
   const canvasEl = useRef(null);
   const fileInputEl = useRef(null);
 
@@ -76,27 +58,29 @@ export default function Home() {
     setModelIsProcessing(true);
 
     // Preprocess image w/ transformer.js AutoProcessor
+    // RawImage -> Tensor -> Float32Array -> send to worker (Tensor are not serializable, send as Float32Array)
     const processor = await AutoProcessor.from_pretrained(MODEL_ID)
     const image = await RawImage.fromCanvas(canvasEl.current);
     const vision_inputs = await processor(image);
     const tensor = vision_inputs.pixel_values.ort_tensor
 
-    const float32Array = tensor.cpuData
+    // final inputs to the model:
+    const float32Array = tensor.cpuData 
     const shape = tensor.dims
 
     worker.current.postMessage({
       type: "classifyImage",
       data: { float32Array, shape },
-      // data: canvasToFloat32Array(inputImage),
     });
 
   };
 
-  // Handle web worker messages
+  // Handle worker messages
   const onWorkerMessage = (event) => {
     const { type, data } = event.data;
 
     if (type == "pong") {
+      // model is ready
       const { success, device } = data;
 
       if (success) {
@@ -105,31 +89,29 @@ export default function Home() {
       } else {
         setModelError("Error (check JS console)");
       }
-    } else if (type == "downloadInProgress" || type == "loadingInProgress") {
-      setModelIsLoading(true);
-    } else if (type == "classifyImageResults") {
-      const {logits, durationMs} = data
 
-      console.log("logits!", logits.cpuData)
+    } else if (type == "downloadInProgress" || type == "loadingInProgress") {
+      // model is loading
+      setModelIsLoading(true);
+
+    } else if (type == "classifyImageResults") {
+      // model delivers 
+      const {logits, durationMs} = data
 
       handleClassifyImageResults(logits)
       setModelIsProcessing(false);
+
     } else if (type == "stats") {
+      // execution times
       setStats(data);
     }
   };
-
-  // Reset all the image-based state: points, mask, offscreen canvases .. 
-  const resetState = () => {
-    setInputImage(null);
-  }
 
   // New image: From File
   const handleFileUpload = (e) => {
     const file = e.target.files[0]
     const dataURL = window.URL.createObjectURL(file)
 
-    resetState()
     setImageURL(dataURL)
   }
 
@@ -137,51 +119,35 @@ export default function Home() {
   const handleUrl = (urlText) => {
     const dataURL = urlText;
 
-    resetState()
     setImageURL(dataURL);
   };
+
+  // New image -> draw onto canvas
+  useEffect(() => {
+    if (imageURL) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = imageURL;
+
+      img.onload = function () {
+        const canvas = canvasEl.current
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        canvas.getContext("2d").drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+      };
+    }
+  }, [imageURL]);
 
   // Load web worker
   useEffect(() => {
     if (!worker.current) {
       setModelIsLoading(true);
 
-      // worker.current = new Worker(new URL("./worker.js", import.meta.url), {
-      //   type: "module",
-      // });
       worker.current = new Worker(new URL('/public/worker.js', import.meta.url))
       worker.current.addEventListener("message", onWorkerMessage);
       worker.current.postMessage({ type: "ping" });
-
     }
-  }, [onWorkerMessage, handleClassifyImageResults]);
-
-  // Load image, pad to square and store in offscreen canvas
-  useEffect(() => {
-    if (imageURL) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = imageURL;
-      img.onload = function () {
-        // 1: draw image onto (screen) canvas
-        const canvas = canvasEl.current
-        canvas.width = img.naturalWidth
-        canvas.height = img.naturalHeight
-        canvas.getContext("2d").drawImage(
-          img, 0, 0, img.naturalWidth, img.naturalHeight,
-          // 0, 0, 
-        );
-
-        // 1: draw reszied image onto (offscreen) canvas
-        const inputImageSize = { w: 224, h: 224 };
-        const inputCanvas = resizeCanvas(canvas, inputImageSize)
-        inputCanvas.width = inputImageSize.w;
-        inputCanvas.height = inputImageSize.h;
-
-        setInputImage(inputCanvas)
-      };
-    }
-  }, [imageURL]);
+  }, []);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
@@ -190,9 +156,7 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() =>
-              window.open("https://github.com/geronimi73/next-safedino", "_blank")
-            }
+            onClick={() =>window.open("https://github.com/geronimi73/next-safedino", "_blank")}
           >
             <Github className="w-4 h-4 mr-2" />
             View on GitHub
@@ -201,21 +165,15 @@ export default function Home() {
         <CardHeader>
           <CardTitle>
             <div className="flex flex-col gap-2">
-              <p>
-                Clientside NSFW detection with onnxruntime-web and Meta's DINOv3
-              </p>
-              <p
-                className={cn(
+              <p>Clientside NSFW detection with onnxruntime-web and Meta's DINOv3</p>
+              <p className={cn(
                   "flex gap-1 items-center",
                   device ? "visible" : "invisible"
-                )}
-              >
-                <Fan
-                  color="#000"
-                  className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"
-                />
+                )}>
+                <Fan color="#000" className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"/>
                 Running on {device}
               </p>
+              { modelError && <p className="text-red-500">Error: {modelError}</p> }
             </div>
           </CardTitle>
         </CardHeader>
@@ -224,6 +182,7 @@ export default function Home() {
 
             {/* BUTTONS */}
             <div className="flex justify-between gap-4">
+
               {/* RUN */}
               { (modelIsLoading || modelIsProcessing ) ? (
                 <Button disabled={true}>
@@ -236,6 +195,7 @@ export default function Home() {
               )}
 
               <div className="flex gap-1">
+
                 {/* Image Upload */}
                 <Button 
                   onClick={()=>{fileInputEl.current.click()}} 
@@ -243,6 +203,7 @@ export default function Home() {
                   disabled={modelIsLoading || modelIsProcessing}>
                   <ImageUp/> Upload
                 </Button>
+
                 {/* Image from URL */}
                 <Button
                     onClick={()=>{setInputDialogOpen(true)}}
