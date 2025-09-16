@@ -1,5 +1,5 @@
 import { DINO_NSFWCLASSIFIER } from "/lib/dino3_nsfw_classifier";
-import { Tensor } from "onnxruntime-web";
+import { Tensor } from "@huggingface/transformers";
 
 const model = new DINO_NSFWCLASSIFIER();
 

@@ -12,7 +12,6 @@ import {LoaderCircle, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle} fr
 
 // Image/Tensor manipulations
 import { resizeCanvas, canvasToFloat32Array, softmax1D} from "@/lib/imageutils";
-import { Tensor } from "onnxruntime-web";
 import { AutoProcessor, RawImage } from "@huggingface/transformers";
 
 // Only used for the AutoProcessor, actual model is loaded in /lib/dino3_nsfw_classifier.js 
