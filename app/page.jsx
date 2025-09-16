@@ -13,6 +13,7 @@ import {LoaderCircle, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle} fr
 // Image/Tensor manipulations
 import { resizeCanvas, canvasToFloat32Array, softmax1D} from "@/lib/imageutils";
 import { AutoProcessor, RawImage } from "@huggingface/transformers";
+import Dino from "@/lib/dino";
 
 // Only used for the AutoProcessor, actual model is loaded in /lib/dino3_nsfw_classifier.js 
 const MODEL_ID = "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX";
@@ -26,8 +27,8 @@ export default function Home() {
   const [stats, setStats] = useState(null);
   const [classificationResult, setClassificationResult] = useState(null)
 
-  // web worker ref
-  const worker = useRef(null);
+  // model ref
+  const model = useRef(null);
 
   // default image 
   const [imageURL, setImageURL] = useState(
@@ -40,71 +41,29 @@ export default function Home() {
   const [inputDialogOpen, setInputDialogOpen] = useState(false);
   const inputDialogDefaultURL = "https://upload.wikimedia.org/wikipedia/commons/9/96/Pro_Air_Martin_404_N255S.jpg"
 
-  // Decoding finished -> parse result and update mask
-  const handleClassifyImageResults = (logitsTensor) => {
-    const logitsArray = logitsTensor.cpuData ? logitsTensor.cpuData : logitsTensor.data
-    const probs = softmax1D(logitsArray)
+  async function loadModel() {
+    setModelIsLoading(true)
 
-    // DEBUG
-    const [probSafe, probNSFW] = probs
-    console.log(probNSFW)
+    model.current = new Dino()
+    const {success, device} = await model.current.waitForModelReady()
 
-    setClassificationResult(probs)
-  };
-
-  // Start encoding image
-  const checkImageClick = async () => {
-    setModelIsProcessing(true);
-
-    // Preprocess image w/ transformer.js AutoProcessor
-    // RawImage -> Tensor -> Float32Array -> send to worker (Tensor are not serializable, send as Float32Array)
-    const processor = await AutoProcessor.from_pretrained(MODEL_ID)
-    const image = await RawImage.fromCanvas(canvasEl.current);
-    const vision_inputs = await processor(image);
-    const tensor = vision_inputs.pixel_values.ort_tensor
-
-    // final inputs to the model:
-    const float32Array = tensor.cpuData 
-    const shape = tensor.dims
-
-    worker.current.postMessage({
-      type: "classifyImage",
-      data: { float32Array, shape },
-    });
-
-  };
-
-  // Handle worker messages
-  const onWorkerMessage = (event) => {
-    const { type, data } = event.data;
-
-    if (type == "pong") {
-      // model is ready
-      const { success, device } = data;
-
-      if (success) {
-        setModelIsLoading(false);
-        setDevice(device);
-      } else {
-        setModelError("Error (check JS console)");
-      }
-
-    } else if (type == "downloadInProgress" || type == "loadingInProgress") {
-      // model is loading
-      setModelIsLoading(true);
-
-    } else if (type == "classifyImageResults") {
-      // model delivers 
-      const {logits, durationMs} = data
-
-      handleClassifyImageResults(logits)
-      setModelIsProcessing(false);
-
-    } else if (type == "stats") {
-      // execution times
-      setStats(data);
+    if (success) {
+      setDevice(device)
+    } else {
+      setModelError("Model loading error, check JS console")
     }
-  };
+
+    setModelIsLoading(false)
+  }
+
+  async function runNSFWCheck() {
+    setModelIsProcessing(true)
+
+    const [logits, probs] = await model.current.process(canvasEl.current)
+    setClassificationResult(probs)
+
+    setModelIsProcessing(false)
+  }
 
   // New image: From File
   const handleFileUpload = (e) => {
@@ -137,14 +96,10 @@ export default function Home() {
     }
   }, [imageURL]);
 
-  // Load web worker
+  // Init dino model
   useEffect(() => {
-    if (!worker.current) {
-      setModelIsLoading(true);
-
-      worker.current = new Worker(new URL('/public/worker.js', import.meta.url))
-      worker.current.addEventListener("message", onWorkerMessage);
-      worker.current.postMessage({ type: "ping" });
+    if (!model.current) {
+      loadModel()
     }
   }, []);
 
@@ -183,12 +138,12 @@ export default function Home() {
             <div className="flex justify-between gap-4">
 
               {/* RUN */}
-              { (modelIsLoading || modelIsProcessing ) ? (
+              { (modelIsLoading || modelIsProcessing || modelError ) ? (
                 <Button disabled={true}>
                   <LoaderCircle className="animate-spin w-6 h-6" />
                 </Button>
               ) : (
-                <Button onClick={checkImageClick}>
+                <Button onClick={runNSFWCheck}>
                   NSFW Check
                 </Button>
               )}
