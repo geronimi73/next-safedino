@@ -4,6 +4,7 @@ const path = require('path');
 
 const nextConfig = {
     webpack: (config) => {        
+        serverExternalPackages: ['sharp', 'onnxruntime-node'],
         config.resolve.alias = {
           ...config.resolve.alias,
           "sharp$": false,
