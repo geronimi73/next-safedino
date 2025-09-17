@@ -10,9 +10,6 @@ import InputDialog from "@/components/ui/inputdialog";
 import { Button } from "@/components/ui/button";
 import {LoaderCircle, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle} from "lucide-react";
 
-// Image/Tensor manipulations
-import { resizeCanvas, canvasToFloat32Array, softmax1D} from "@/lib/imageutils";
-import { AutoProcessor, RawImage } from "@huggingface/transformers";
 import Dino from "@/lib/dino";
 
 // Only used for the AutoProcessor, actual model is loaded in /lib/dino3_nsfw_classifier.js 
