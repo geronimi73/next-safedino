@@ -12,6 +12,11 @@ const nextConfig = {
     images: {
         unoptimized: true,
     },
+    outputFileTracingExcludes: {
+        'index.js': [
+            './node_modules/onnxruntime-node/*'
+        ],
+    },
     webpack: (config) => {        
         config.resolve.alias = {
           ...config.resolve.alias,
