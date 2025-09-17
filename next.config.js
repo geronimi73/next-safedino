@@ -13,7 +13,7 @@ const nextConfig = {
         unoptimized: true,
     },
     outputFileTracingExcludes: {
-        'index.js': [
+        '/': [
             './node_modules/onnxruntime-node/*'
         ],
     },
