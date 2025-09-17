@@ -19,6 +19,7 @@ export default function Home() {
   const [modelProcessing, setModelProcessing] = useState(false);
   const [modelError, setModelError] = useState(null);
   const [imageReady, setImageReady] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false) // dropzone 
   const [inputDialogOpen, setInputDialogOpen] = useState(false);
   const modelBusy = !modelReady || modelProcessing || modelError
 
@@ -74,6 +75,32 @@ export default function Home() {
 
     setImageURL(dataURL);
   };
+
+  // Image dropzone stuff
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      const file = files[0]
+      if (file.type.startsWith("image/")) {
+        setImageReady(false)
+        const dataURL = window.URL.createObjectURL(file)
+        setImageURL(dataURL)
+      }
+    }
+  }
 
   // Image and model ready -> process
   useEffect(() => {
@@ -160,7 +187,12 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-6">
 
             {/* Image Card */}
-            <Card className="border-2 border-dashed border-primary/20 hover:border-primary/40 transition-colors shadow-lg bg-card/80 backdrop-blur-sm">
+            <Card
+              className={`border-2 border-dashed transition-all duration-200 shadow-lg bg-card/80 backdrop-blur-sm ${
+                isDragOver ? "border-primary bg-primary/5 scale-[1.02]" : "border-primary/20 hover:border-primary/40"
+              }`}
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+            >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-card-foreground">
                   <Upload className="w-5 h-5" />
@@ -169,6 +201,15 @@ export default function Home() {
                 <CardDescription>Upload an image file or provide a URL for classification</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {isDragOver && (
+                  <div className="absolute inset-0 bg-white bg-opacity-80 rounded-lg flex items-center justify-center z-10">
+                    <div className="text-center">
+                      <Upload className="w-12 h-12 text-primary mx-auto mb-2" />
+                      <p className="text-lg font-semibold text-primary">Drop your image here</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-3">
                   <Button onClick={() => {fileInputEl.current.click()}} disabled={modelBusy}
                     className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
