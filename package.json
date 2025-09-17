@@ -12,7 +12,6 @@
     "@huggingface/transformers": "^3.7.3",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.0",
-    "@vercel/analytics": "^1.4.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide": "^0.456.0",

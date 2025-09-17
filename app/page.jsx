@@ -1,7 +1,6 @@
 "use client";
 
 import React, {useState, useEffect, useRef, useCallback,} from "react";
-import { Analytics } from "@vercel/analytics/next";
 import { cn } from "@/lib/utils";
 
 // UI
@@ -10,60 +9,57 @@ import InputDialog from "@/components/ui/inputdialog";
 import { Button } from "@/components/ui/button";
 import {LoaderCircle, ImageUp, ImageDown, Github, Fan, Shield, AlertTriangle} from "lucide-react";
 
+// Dino webworker
 import Dino from "@/lib/dino";
-
-// Only used for the AutoProcessor, actual model is loaded in /lib/dino3_nsfw_classifier.js 
-const MODEL_ID = "onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX";
 
 export default function Home() {
   // state
   const [device, setDevice] = useState(null);
-  const [modelIsLoading, setModelIsLoading] = useState(false);
-  const [modelIsProcessing, setModelIsProcessing] = useState(false);
+  const [modelReady, setModelReady] = useState(false);
+  const [modelProcessing, setModelProcessing] = useState(false);
   const [modelError, setModelError] = useState(null);
-  const [stats, setStats] = useState(null);
+  const [imageReady, setImageReady] = useState(false);
+  const [inputDialogOpen, setInputDialogOpen] = useState(false);
+  const modelBusy = !modelReady || modelProcessing || modelError
+
   const [classificationResult, setClassificationResult] = useState(null)
 
-  // model ref
-  const model = useRef(null);
-
-  // default image 
+  // default image on load 
   const [imageURL, setImageURL] = useState(
-    "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
+    "https://upload.wikimedia.org/wikipedia/commons/8/8e/Laura_Chaubard_%26_Yann_Le_Cun_-_2024_%2853814052697%29_%28cropped%29.jpg"
   );
+  // default image URL
+  const inputDialogDefaultURL = "https://www.cumfaceai.com/anime-large.png"
+
+  const model = useRef(null);
   const canvasEl = useRef(null);
   const fileInputEl = useRef(null);
 
-  // input dialog for custom URLs
-  const [inputDialogOpen, setInputDialogOpen] = useState(false);
-  const inputDialogDefaultURL = "https://upload.wikimedia.org/wikipedia/commons/9/96/Pro_Air_Martin_404_N255S.jpg"
-
   async function loadModel() {
-    setModelIsLoading(true)
-
     model.current = new Dino()
     const {success, device} = await model.current.waitForModelReady()
 
     if (success) {
       setDevice(device)
+      setModelReady(true)
     } else {
       setModelError("Model loading error, check JS console")
     }
-
-    setModelIsLoading(false)
   }
 
   async function runNSFWCheck() {
-    setModelIsProcessing(true)
+    setModelProcessing(true)
 
     const [logits, probs] = await model.current.process(canvasEl.current)
     setClassificationResult(probs)
 
-    setModelIsProcessing(false)
+    setModelProcessing(false)
   }
 
   // New image: From File
   const handleFileUpload = (e) => {
+    setImageReady(false)
+
     const file = e.target.files[0]
     const dataURL = window.URL.createObjectURL(file)
 
@@ -72,10 +68,19 @@ export default function Home() {
 
   // New image: From URL 
   const handleUrl = (urlText) => {
+    setImageReady(false)
+
     const dataURL = urlText;
 
     setImageURL(dataURL);
   };
+
+  // Image and model ready -> process
+  useEffect(() => {
+    if (modelReady && imageReady) {
+      runNSFWCheck()
+    }
+  }, [modelReady, imageReady]);
 
   // New image -> draw onto canvas
   useEffect(() => {
@@ -89,6 +94,8 @@ export default function Home() {
         canvas.width = img.naturalWidth
         canvas.height = img.naturalHeight
         canvas.getContext("2d").drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+
+        setImageReady(true)
       };
     }
   }, [imageURL]);
@@ -117,14 +124,33 @@ export default function Home() {
           <CardTitle>
             <div className="flex flex-col gap-2">
               <p>Clientside NSFW detection with onnxruntime-web and Meta's DINOv3</p>
-              <p className={cn(
-                  "flex gap-1 items-center",
-                  device ? "visible" : "invisible"
-                )}>
-                <Fan color="#000" className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"/>
-                Running on {device}
+              <p className="flex gap-1 items-center">
+                { modelError ? (
+                  <>
+                    <span className="text-red-500">Error: {modelError}</span> 
+                  </>
+                  ) : !modelReady ? (
+                  <>
+                    <LoaderCircle className="animate-spin w-6 h-6" />
+                    Loading model
+                  </>
+                  ) : modelProcessing ? (
+                  <>
+                    <LoaderCircle className="animate-spin w-6 h-6" />
+                    Processing image
+                  </>
+                  ) : modelReady ? (
+                  <>
+                    <Fan color="#000" className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"/>
+                    Running on {device}
+                  </>
+                  ) : (
+                  <>
+                    <LoaderCircle className="animate-spin w-6 h-6" />
+                  </>
+                  )
+                }
               </p>
-              { modelError && <p className="text-red-500">Error: {modelError}</p> }
             </div>
           </CardTitle>
         </CardHeader>
@@ -132,56 +158,30 @@ export default function Home() {
           <div className="flex flex-col gap-4">
 
             {/* BUTTONS */}
-            <div className="flex justify-between gap-4">
-
-              {/* RUN */}
-              { (modelIsLoading || modelIsProcessing || modelError ) ? (
-                <Button disabled={true}>
-                  <LoaderCircle className="animate-spin w-6 h-6" />
-                </Button>
-              ) : (
-                <Button onClick={runNSFWCheck}>
-                  NSFW Check
-                </Button>
-              )}
-
+            <div className="flex justify-between gap-2">
+              <div/>
               <div className="flex gap-1">
-
                 {/* Image Upload */}
-                <Button 
-                  onClick={()=>{fileInputEl.current.click()}} 
-                  variant="secondary" 
-                  disabled={modelIsLoading || modelIsProcessing}>
+                <Button onClick={()=>{fileInputEl.current.click()}} variant="secondary" disabled={modelBusy}>
                   <ImageUp/> Upload
                 </Button>
 
                 {/* Image from URL */}
-                <Button
-                    onClick={()=>{setInputDialogOpen(true)}}
-                    variant="secondary"
-                    disabled={modelIsLoading || modelIsProcessing}
-                  >
+                <Button onClick={()=>{setInputDialogOpen(true)}} variant="secondary" disabled={modelBusy}>
                   <ImageUp/> From URL
                 </Button>
               </div>
             </div>
 
             {/* NSFW Prob. */}
-            <div>
-              <ClassificationResults result={classificationResult} />
-            </div>
+            <ClassificationResults result={classificationResult} />
 
             {/* IMAGE */}
             <div className="flex justify-center">
-              <canvas ref={canvasEl} className="max-w-md w-auto h-auto"/>
+              <canvas ref={canvasEl} className="max-w-sm w-auto h-auto"/>
             </div>
           </div>
         </CardContent>
-        <div className="flex flex-col p-4 gap-2">
-          <pre className="p-4 border-gray-600 bg-gray-100">
-            {stats != null && JSON.stringify(stats, null, 2)}
-          </pre>
-        </div>
       </Card>
       <InputDialog 
         open={inputDialogOpen} 
@@ -196,7 +196,6 @@ export default function Home() {
         type='file' 
         onInput={handleFileUpload} 
         />
-      <Analytics />
     </div>
   );
 }
