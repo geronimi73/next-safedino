@@ -3,15 +3,6 @@
 const path = require('path');
 
 const nextConfig = {
-    eslint: {
-        ignoreDuringBuilds: true,
-    },
-    typescript: {
-        ignoreBuildErrors: true,
-    },
-    images: {
-        unoptimized: true,
-    },
     outputFileTracingExcludes: {
         '/': [
             './node_modules/onnxruntime-node/*'
