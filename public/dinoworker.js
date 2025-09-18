@@ -1,8 +1,7 @@
 import path from "path";
 
-import { Tensor } from "@huggingface/transformers";
+import { Tensor, softmax } from "@huggingface/transformers";
 import * as ort from "onnxruntime-web";
-import { softmax1D } from "@/lib/imageutils";
 
 const MODEL_URL =  "https://huggingface.co/g-ronimo/dinov3_nsfw_classifier/resolve/main/dino_v3_linear.onnx";
 
@@ -124,7 +123,7 @@ self.onmessage = async (e) => {
 
     // get logits and softmax() -> probs
     const logits = results.classification.cpuData ? results.classification.cpuData : results.classification.data
-    const probs = softmax1D(logits)
+    const probs = softmax(logits)
 
     self.postMessage({
       type: 'process_result',
